@@ -717,6 +717,7 @@ No markdown, no backticks, just the raw JSON array.`;
         })
       });
       const data   = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || 'API request failed');
       const raw    = data.content.map(b => b.text||'').join('');
       const clean  = raw.replace(/```json|```/g,'').trim();
       const excuses = JSON.parse(clean);
