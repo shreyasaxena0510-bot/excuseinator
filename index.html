@@ -624,6 +624,7 @@
   function startLoading() {
     document.getElementById('empty-state').style.display  = 'none';
     document.getElementById('error').classList.remove('visible');
+    document.getElementById('error').textContent = '⚡ SOMETHING WENT WRONG!! TRY AGAIN! ⚡';
     document.getElementById('excuse-list').innerHTML = '';
     document.getElementById('loading').classList.add('visible');
     let pi = 0, mi = 0;
@@ -636,6 +637,26 @@
   function stopLoading() {
     clearInterval(powInterval); clearInterval(msgInterval);
     document.getElementById('loading').classList.remove('visible');
+  }
+
+  function parseExcuses(raw) {
+    const clean = raw.replace(/```json|```/g, '').trim();
+    try {
+      const parsed = JSON.parse(clean);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    const match = clean.match(/\[[\s\S]*\]/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (Array.isArray(parsed)) return parsed;
+    }
+    throw new Error('Invalid excuses JSON');
+  }
+
+  function showError(message) {
+    const el = document.getElementById('error');
+    el.textContent = message || '⚡ SOMETHING WENT WRONG!! TRY AGAIN! ⚡';
+    el.classList.add('visible');
   }
 
   function levelClass(level) {
@@ -712,20 +733,25 @@ No markdown, no backticks, just the raw JSON array.`;
         headers: { 'Content-Type': 'application/json' },
         body   : JSON.stringify({
           model     : 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
+          max_tokens: 4096,
           messages  : [{ role: 'user', content: prompt }]
         })
       });
       const data   = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || data.error || 'API request failed');
-      const raw    = data.content.map(b => b.text||'').join('');
-      const clean  = raw.replace(/```json|```/g,'').trim();
-      const excuses = JSON.parse(clean);
+      if (!res.ok) {
+        const msg = typeof data.error === 'string'
+          ? data.error
+          : (data.error?.message || 'API request failed');
+        throw new Error(msg);
+      }
+      const raw = data.content?.map(b => b.text || '').join('') || '';
+      if (!raw) throw new Error('Empty response from server');
+      const excuses = parseExcuses(raw);
       stopLoading();
       renderExcuses(excuses);
     } catch(e) {
       stopLoading();
-      document.getElementById('error').classList.add('visible');
+      showError(`⚡ ${e.message || 'SOMETHING WENT WRONG!! TRY AGAIN!'} ⚡`);
     } finally {
       document.getElementById('gen-btn').style.pointerEvents = '';
     }
